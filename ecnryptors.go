@@ -18,87 +18,123 @@ const (
 	cipherModeGCM
 )
 
-type SpringEncryptor struct {
+// Factories
+
+func Standard(password, salt string) StandardEncryptor {
+	return StandardEncryptor{key: newPBKDF2WithHmacSHA1(password, salt)}
+}
+
+func Stronger(password, salt string) StrongerEncryptor {
+	return StrongerEncryptor{key: newPBKDF2WithHmacSHA1(password, salt)}
+}
+
+func Text(password, salt string) TextEncryptor {
+	return TextEncryptor{standard: Standard(password, salt)}
+}
+
+func QueryableText(password, salt string) QueryableTextEncryptor {
+	return QueryableTextEncryptor{key: newPBKDF2WithHmacSHA1(password, salt)}
+}
+
+func Delux(password, salt string) DeluxEncryptor {
+	return DeluxEncryptor{stronger: Stronger(password, salt)}
+}
+
+// Encryptors
+
+type StandardEncryptor struct {
 	key []byte
 }
 
-func (se SpringEncryptor) EncryptStandard(data []byte) []byte {
+type StrongerEncryptor struct {
+	key []byte
+}
+
+type TextEncryptor struct {
+	standard StandardEncryptor
+}
+
+type QueryableTextEncryptor struct {
+	key []byte
+}
+
+type DeluxEncryptor struct {
+	stronger StrongerEncryptor
+}
+
+func (e StandardEncryptor) Encrypt(data []byte) []byte {
 	iv := make([]byte, aes.BlockSize)
 	rand.Seed(time.Now().UnixNano())
 	rand.Read(iv)
-	ciphertext := encryptSpringAesBytes(data, iv, se.key, cipherModeCBC)
+	ciphertext := encryptSpringAesBytes(data, iv, e.key, cipherModeCBC)
 	return append(iv, ciphertext...)
 }
 
-func (se SpringEncryptor) DecryptStandard(data []byte) []byte {
+func (e StandardEncryptor) Decrypt(data []byte) []byte {
 	iv := data[:aes.BlockSize]
 	ciphertext := data[aes.BlockSize:]
-	return decryptSpringAesBytes(ciphertext, iv, se.key, cipherModeCBC)
+	return decryptSpringAesBytes(ciphertext, iv, e.key, cipherModeCBC)
 }
 
-func (se SpringEncryptor) EncryptStronger(data []byte) []byte {
+func (e StrongerEncryptor) Encrypt(data []byte) []byte {
 	iv := make([]byte, aes.BlockSize)
 	rand.Seed(time.Now().UnixNano())
 	rand.Read(iv)
-	ciphertext := encryptSpringAesBytes(data, iv, se.key, cipherModeGCM)
+	ciphertext := encryptSpringAesBytes(data, iv, e.key, cipherModeGCM)
 	return append(iv, ciphertext...)
 }
 
-func (se SpringEncryptor) DecryptStronger(data []byte) []byte {
+func (e StrongerEncryptor) Decrypt(data []byte) []byte {
 	iv := data[:aes.BlockSize]
 	ciphertext := data[aes.BlockSize:]
-	return decryptSpringAesBytes(ciphertext, iv, se.key, cipherModeGCM)
+	return decryptSpringAesBytes(ciphertext, iv, e.key, cipherModeGCM)
 }
 
-func (se SpringEncryptor) EncryptText(data string) string {
+func (e TextEncryptor) Encrypt(data string) string {
 	dataBytes := []byte(data)
-	encryptedData := se.EncryptStandard(dataBytes)
+	encryptedData := e.standard.Encrypt(dataBytes)
 	return hex.EncodeToString(encryptedData)
 }
 
-func (se SpringEncryptor) DecryptText(data string) string {
+func (e TextEncryptor) Decrypt(data string) string {
 	dataBytes, err := hex.DecodeString(data)
 	if err != nil {
 		panic(err)
 	}
-	decryptedData := se.DecryptStandard(dataBytes)
+	decryptedData := e.standard.Decrypt(dataBytes)
 	return string(decryptedData)
 }
 
-func (se SpringEncryptor) EncryptDelux(data string) string {
+func (e DeluxEncryptor) Encrypt(data string) string {
 	dataBytes := []byte(data)
-	encryptedData := se.EncryptStronger(dataBytes)
+	encryptedData := e.stronger.Encrypt(dataBytes)
 	return hex.EncodeToString(encryptedData)
 }
 
-func (se SpringEncryptor) DecryptDelux(data string) string {
+func (e DeluxEncryptor) Decrypt(data string) string {
 	dataBytes, err := hex.DecodeString(data)
 	if err != nil {
 		panic(err)
 	}
-	decryptedData := se.DecryptStronger(dataBytes)
+	decryptedData := e.stronger.Decrypt(dataBytes)
 	return string(decryptedData)
 }
 
-func (se SpringEncryptor) EncryptQueryableText(data string) string {
+func (e QueryableTextEncryptor) Encrypt(data string) string {
 	dataBytes := []byte(data)
 	iv := make([]byte, aes.BlockSize)
-	ciphertext := encryptSpringAesBytes(dataBytes, iv, se.key, cipherModeCBC)
+	ciphertext := encryptSpringAesBytes(dataBytes, iv, e.key, cipherModeCBC)
 	return hex.EncodeToString(ciphertext)
 }
 
-func (se SpringEncryptor) DecryptQueryableText(data string) string {
+func (e QueryableTextEncryptor) Decrypt(data string) string {
 	dataBytes, err := hex.DecodeString(data)
 	if err != nil {
 		panic(err)
 	}
 	iv := make([]byte, aes.BlockSize)
-	decryptedData := decryptSpringAesBytes(dataBytes, iv, se.key, cipherModeCBC)
+	decryptedData := decryptSpringAesBytes(dataBytes, iv, e.key, cipherModeCBC)
 	return string(decryptedData)
-}
-
-func NewSpringEncryptor(password, salt string) SpringEncryptor {
-	return SpringEncryptor{key: newPBKDF2WithHmacSHA1(password, salt)}
 }
 
 func newPBKDF2WithHmacSHA1(password, salt string) []byte {
